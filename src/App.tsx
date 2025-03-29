@@ -59,6 +59,26 @@ class LocalStorageProvider {
   }
 }
 
+const CheckIcon = ({
+  width = 24,
+  height = 24,
+  fill = "currentColor",
+  ...props
+}: React.SVGProps<SVGSVGElement>) => {
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox="0 0 24 24"
+      fill={fill}
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+    </svg>
+  )
+}
+
 type User = {
   id: string
   name: string
@@ -82,10 +102,11 @@ function App() {
     const ytext = ydoc.getText("content")
     const yusers = ydoc.getMap("users")
 
-    // 注册当前用户
-    yusers.set(currentUser.id, currentUser)
-
     const provider = new LocalStorageProvider(ydoc)
+
+    if (text === "") {
+      setText(ytext.toString()) // 初始化时设置文本
+    }
 
     // 监听文本变化
     ytext.observe(() => {
@@ -102,8 +123,22 @@ function App() {
     // 保存 Provider 实例
     setProvider(provider)
 
+    // 注册当前用户
+    yusers.set(currentUser.id, currentUser)
+    provider.saveToStorage() // git actions 服务 会在页面 初始化 时重定向 1 次导致 yusers.observe 混乱，这里明确触发 1 次保存
+
+    const handleBeforeUnload = () => {
+      yusers.delete(currentUser.id)
+      provider.saveToStorage()
+      provider.destroy()
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+
     // 清理
-    return () => provider.destroy()
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload)
+    }
   }, [ydoc])
 
   // 处理文本编辑
@@ -116,25 +151,38 @@ function App() {
 
   return (
     <div style={{ margin: "8px" }}>
-      <div style={{ padding: "20px", margin: "10px auto" }}>
-        {Object.values(users).map((user) => (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 14,
-              color: user.color,
-            }}
-          >
-            <img
-              src={user.avatar}
-              alt={user.name}
-              style={{ width: "20px", height: "20px", borderRadius: "50%" }}
-            />
-            <span>name: {user.name}</span>
-            <span>id: {user.id}</span>
-          </div>
-        ))}
+      <div style={{ padding: "10px", margin: "10px auto" }}>
+        users:
+        <ul style={{ padding: 0 }}>
+          {Object.values(users).length === 0 ? "-" : ""}
+          {Object.values(users).map((user) => (
+            <li
+              key={user.id}
+              style={{
+                color: user.color,
+                display: "flex",
+                alignItems: "center",
+                gap: 14,
+                marginBottom: 4,
+              }}
+            >
+              <CheckIcon
+                style={{ opacity: user.id === currentUser.id ? 1 : 0 }}
+              />
+              <img
+                src={user.avatar}
+                alt={user.name}
+                style={{
+                  width: "20px",
+                  height: "20px",
+                  borderRadius: "50%",
+                }}
+              />
+              <span style={{ width: 140 }}>name: {user.name}</span>
+              <span>id: {user.id}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <textarea
@@ -148,7 +196,7 @@ function App() {
 }
 
 {
-  /* 鼠标光标位置的实时同步需要高频更新（每秒可能触发数十次）， localStorage 的机制（同步延迟 > 100ms）决定了它不适合这种场景。 */
+  /* 鼠标位置的实时同步需要高频更新（每秒可能触发数十次）， localStorage 的机制（同步延迟 > 100ms）决定了它不适合这种场景。 */
 }
 
 export default App
